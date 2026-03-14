@@ -5,6 +5,12 @@ frontend/dist/
 **/build/
 **/dist/
 
+# WikiLens generated/runtime artifacts
+backend/data/cache/
+backend/simplewiki-latest-pages-articles.xml*
+backend/enwiki-*-pages-articles*.xml*
+*.pid
+
 # CMake
 CMakeCache.txt
 CMakeFiles/
@@ -106,7 +112,3 @@ logs/
 # backend/data/*.json
 # backend/data/*.xml
 # backend/data/sample_docs/
-
-
-
-simplewiki-latest-pages-articles.xml.1
