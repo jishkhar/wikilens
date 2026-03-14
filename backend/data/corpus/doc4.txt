@@ -1,0 +1,7 @@
+Relational databases organize information into tables with rows and columns, using SQL for querying and manipulation. ACID properties ensure transaction reliability: atomicity guarantees all-or-nothing execution, consistency maintains database invariants, isolation prevents concurrent transaction interference, and durability persists committed changes.
+
+Query optimization transforms declarative SQL statements into efficient execution plans. The query planner estimates costs for different strategies, considering indexes, join algorithms, and data statistics. B-tree indexes accelerate lookups by maintaining sorted keys in balanced tree structures. Hash indexes support equality comparisons but not range queries.
+
+Normalization reduces data redundancy by decomposing tables according to functional dependencies. First normal form eliminates repeating groups, second normal form removes partial dependencies, and third normal form eliminates transitive dependencies. Denormalization sometimes improves read performance by reducing joins.
+
+NoSQL databases emerged to handle massive scale and flexible schemas. Document stores like MongoDB organize data as JSON-like documents. Column-family stores like Cassandra optimize write-heavy workloads. Graph databases efficiently traverse relationships in connected data. Choosing between relational and NoSQL systems depends on consistency requirements, query patterns, and scalability needs.

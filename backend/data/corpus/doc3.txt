@@ -1,0 +1,7 @@
+Distributed systems coordinate multiple computers to achieve common goals while appearing as unified systems to users. The CAP theorem states that distributed databases cannot simultaneously guarantee consistency, availability, and partition tolerance. System designers must choose which two properties to prioritize based on application requirements.
+
+Consensus algorithms like Paxos and Raft enable nodes to agree on shared state despite failures. These protocols handle leader election, log replication, and fault tolerance in distributed databases and coordination services. Raft simplifies Paxos by separating leader election, log replication, and safety concerns into distinct subproblems.
+
+Microservices architectures decompose applications into independently deployable services that communicate through network protocols. This approach improves scalability and development velocity but introduces complexity in service discovery, load balancing, and distributed tracing. Message queues and event streaming platforms like Kafka facilitate asynchronous communication between services.
+
+Consistency models range from strong consistency, where all nodes see identical data, to eventual consistency, where updates propagate gradually. Vector clocks and conflict-free replicated data types help resolve conflicts in eventually consistent systems. Understanding distributed system principles is crucial for building reliable cloud-native applications.

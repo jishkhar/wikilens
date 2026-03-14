@@ -1,0 +1,7 @@
+Operating systems manage computer hardware and provide services to applications. Process management involves scheduling CPU time among competing processes. Round-robin scheduling allocates fixed time slices, while priority scheduling favors important tasks. Multilevel feedback queues combine multiple strategies to balance responsiveness and throughput.
+
+Memory management handles allocation and protection of RAM. Virtual memory uses paging to provide processes with contiguous address spaces despite fragmented physical memory. Page tables map virtual addresses to physical frames. When accessing unmapped pages, page faults trigger the operating system to load data from disk. Translation lookaside buffers cache recent mappings to accelerate address translation.
+
+File systems organize persistent storage into directories and files. Inodes store metadata including permissions, timestamps, and block pointers. Journaling file systems like ext4 and NTFS maintain transaction logs to recover from crashes. Copy-on-write file systems like Btrfs and ZFS enable efficient snapshots by sharing unchanged blocks.
+
+Interprocess communication mechanisms include pipes, shared memory, and message passing. Semaphores and mutexes coordinate access to shared resources, preventing race conditions. Deadlock occurs when processes wait circularly for resources. Operating system design balances performance, security, and resource utilization through careful algorithm selection and implementation.

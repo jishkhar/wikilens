@@ -1,0 +1,7 @@
+Artificial intelligence enables machines to perform tasks requiring human-like cognition. Search algorithms explore problem spaces to find solutions. Breadth-first search examines nodes level by level, guaranteeing shortest paths in unweighted graphs. Depth-first search explores deeply before backtracking, using less memory but potentially missing optimal solutions.
+
+Informed search strategies like A-star use heuristics estimating goal distance to guide exploration efficiently. Admissible heuristics never overestimate true costs, ensuring optimal solutions. Game-playing algorithms employ minimax to evaluate positions by assuming optimal opponent play. Alpha-beta pruning eliminates branches that cannot affect final decisions, significantly reducing search space.
+
+Knowledge representation structures information for reasoning. Ontologies define concepts and relationships in domains. Logic-based systems use inference rules to derive conclusions from premises. First-order logic combines predicates, quantifiers, and variables to express complex statements.
+
+Expert systems encode domain knowledge in rule bases consulted during inference. Fuzzy logic handles uncertainty through partial truth values rather than binary true-false assignments. Probabilistic reasoning uses Bayesian networks to model dependencies between random variables. Modern AI increasingly relies on statistical learning rather than hand-coded knowledge, but symbolic reasoning remains valuable for interpretability and incorporating domain expertise.

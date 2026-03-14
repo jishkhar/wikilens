@@ -1,0 +1,7 @@
+Cryptography secures information through mathematical algorithms. Symmetric encryption uses identical keys for encryption and decryption. AES has become the standard symmetric cipher, offering strong security with efficient implementation. Block cipher modes like CBC and GCM determine how plaintext blocks are processed.
+
+Asymmetric encryption employs key pairs where public keys encrypt messages that only corresponding private keys can decrypt. RSA relies on the difficulty of factoring large composite numbers. Elliptic curve cryptography achieves similar security with smaller key sizes, improving performance on resource-constrained devices.
+
+Hash functions produce fixed-size digests from arbitrary input data. Cryptographic hashes must resist collisions where different inputs produce identical outputs. SHA-256 and SHA-3 provide collision resistance for digital signatures and password storage. Salting prevents rainbow table attacks by adding random data before hashing passwords.
+
+Digital signatures combine hashing and asymmetric encryption to verify message authenticity and integrity. Certificate authorities issue digital certificates binding public keys to identities. TLS protocols use certificates to establish secure connections over untrusted networks. Quantum computing threatens current cryptographic systems, driving research into post-quantum algorithms resistant to quantum attacks.

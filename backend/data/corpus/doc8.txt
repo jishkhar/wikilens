@@ -1,0 +1,7 @@
+Cloud computing delivers computing resources over the internet as services. Infrastructure as a Service provides virtualized hardware including virtual machines, storage, and networks. Hypervisors enable multiple virtual machines to share physical servers through resource isolation and scheduling.
+
+Platform as a Service abstracts infrastructure details, offering managed environments for deploying applications. Developers focus on code while the platform handles scaling, patching, and monitoring. Containerization technologies like Docker package applications with dependencies into portable units. Kubernetes orchestrates container deployment, scaling, and management across clusters.
+
+Software as a Service delivers applications entirely through web browsers, eliminating installation and maintenance burdens. Multi-tenancy allows providers to serve multiple customers from shared infrastructure while maintaining data isolation and security.
+
+Serverless computing executes functions in response to events without managing servers. Auto-scaling adjusts resources based on demand, optimizing costs. Cold starts introduce latency when initializing new function instances. Cloud providers offer managed databases, message queues, and machine learning services as building blocks for applications. Adopting cloud computing requires understanding pricing models, security responsibilities, and vendor lock-in risks while leveraging elasticity and global distribution capabilities.

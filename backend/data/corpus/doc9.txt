@@ -1,0 +1,9 @@
+Compiler design transforms high-level programming languages into executable machine code. Lexical analysis scans source code into tokens representing keywords, identifiers, and operators. Regular expressions define token patterns recognized by finite automata.
+
+Syntax analysis constructs parse trees representing grammatical structure. Context-free grammars specify language syntax, while parsing algorithms like recursive descent or LR parsing validate code against grammar rules. Abstract syntax trees simplify parse trees by removing syntactic details.
+
+Semantic analysis checks type correctness and resolves symbol references. Type systems ensure operations receive compatible operands, catching errors before execution. Symbol tables map identifiers to declarations, supporting scoping rules and name resolution.
+
+Intermediate representation facilitates optimization and retargeting to different architectures. Three-address code uses simple instructions suitable for analysis. Data flow analysis tracks variable definitions and uses to enable optimizations like constant propagation and dead code elimination. Loop optimizations including invariant code motion and strength reduction improve performance.
+
+Code generation selects machine instructions and allocates registers. Instruction scheduling reorders operations to exploit processor pipelines. Just-in-time compilation combines interpretation and compilation by generating native code during execution, balancing startup time and runtime performance.

@@ -1,0 +1,7 @@
+Computer networks enable communication between devices through layered protocols. The OSI model divides networking into seven abstraction layers, while the simpler TCP/IP model uses four layers. The physical layer handles bit transmission over media. The data link layer manages frame delivery between adjacent nodes using MAC addresses.
+
+The network layer routes packets across networks using IP addresses. Routers examine destination addresses and forward packets based on routing tables populated by protocols like OSPF and BGP. The transport layer provides end-to-end communication through TCP for reliable, ordered delivery or UDP for faster, connectionless transmission.
+
+TCP implements flow control through sliding windows and congestion control through algorithms like slow start and congestion avoidance. When packet loss occurs, TCP reduces transmission rates to alleviate network congestion. UDP sacrifices reliability for lower latency, making it suitable for real-time applications like video streaming.
+
+Application layer protocols define specific communication patterns. HTTP transfers web resources, DNS resolves domain names to IP addresses, and SMTP delivers email. Modern networking incorporates software-defined networking, where control planes separate from data planes, enabling programmable network behavior. Understanding these protocols is fundamental for developing networked applications and troubleshooting connectivity issues.
