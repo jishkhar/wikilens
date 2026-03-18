@@ -24,7 +24,7 @@ WikiLens is a full-stack Wikipedia search engine built with a C++ backend and a 
 
 - Frontend setup and dev workflow: [frontend/README.md](/home/nyx/Projects/wikilens/frontend/README.md)
 - Backend build, runtime flags, cache artifacts, and API notes: [backend/README.md](/home/nyx/Projects/wikilens/backend/README.md)
-- AWS/container deployment guide: [AWS_DEPLOYMENT.md](/home/nyx/Projects/wikilens/AWS_DEPLOYMENT.md)
+- AWS/container deployment guide: [deployment.md](/home/nyx/Projects/wikilens/deployment.md)
 
 ## Quick Start
 
@@ -110,7 +110,7 @@ Current snapshot:
 
 ## Deployment Path
 
-For containerized deployment on AWS EC2, follow [AWS_DEPLOYMENT.md](/home/nyx/Projects/wikilens/AWS_DEPLOYMENT.md).
+For containerized deployment on AWS EC2, follow [deployment.md](/home/nyx/Projects/wikilens/deployment.md).
 
 The intended production shape is:
 
