@@ -55,12 +55,21 @@ double DocumentStore::getPageRank(uint32_t doc_id) const {
     return it->second.pagerank;
 }
 
+size_t DocumentStore::totalDocs() const {
+    return docs_.size();
+}
+
 const Document*
 DocumentStore::getDocument(uint32_t doc_id) const {
 
     auto it = docs_.find(doc_id);
     if (it == docs_.end()) return nullptr;
     return &it->second;
+}
+
+const std::unordered_map<uint32_t, Document>&
+DocumentStore::allDocuments() const {
+    return docs_;
 }
 
 bool DocumentStore::saveToFile(const std::string& path) const {

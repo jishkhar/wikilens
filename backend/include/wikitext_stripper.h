@@ -17,6 +17,10 @@ private:
     std::string stripTemplates(const std::string& text);
     std::string stripTables(const std::string& text);
     std::string stripFormatting(const std::string& text);
+    std::string collapseWhitespace(const std::string& text);
 
     StripResult processLinks(const std::string& text);
+    std::string cleanLinkDisplay(const std::string& raw_display);
+    std::string normalizeLinkTarget(const std::string& raw_target);
+    bool shouldRecordInternalLink(const std::string& target) const;
 };

@@ -10,8 +10,11 @@ public:
                      const std::vector<std::string>& tokens);
 
     const PostingList* lookup(const std::string& term) const;
+    std::vector<std::string> suggestPrefix(const std::string& prefix,
+                                           size_t limit = 8) const;
 
     uint32_t totalDocs() const;
+    size_t termCount() const;
     uint32_t docLength(uint32_t doc_id) const;
     double avgDocLength() const;
 

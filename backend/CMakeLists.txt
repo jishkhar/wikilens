@@ -23,8 +23,10 @@ add_executable(wikilens
 
 find_package(Threads REQUIRED)
 find_package(EXPAT REQUIRED)
+find_package(BZip2 REQUIRED)
 
 target_link_libraries(wikilens
     pthread
     EXPAT::EXPAT
+    BZip2::BZip2
 )

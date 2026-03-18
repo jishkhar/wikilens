@@ -1,8 +1,15 @@
 #include "wiki_parser.h"
+
+#include <bzlib.h>
 #include <expat.h>
+
+#include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <string_view>
 #include <vector>
+
+namespace {
 
 struct ParserState {
     std::string current_element;
@@ -10,13 +17,121 @@ struct ParserState {
     std::string text;
     bool in_page = false;
     bool in_revision = false;
+    bool stop_requested = false;
+    XML_Parser parser = nullptr;
     WikiParser::PageCallback callback;
 };
+
+bool endsWith(std::string_view value,
+              std::string_view suffix) {
+    return value.size() >= suffix.size() &&
+           value.substr(value.size() - suffix.size()) == suffix;
+}
+
+bool parseChunk(XML_Parser parser,
+                ParserState& state,
+                const char* data,
+                int size,
+                bool is_final_chunk) {
+    if (XML_Parse(parser, data, size, is_final_chunk) != XML_STATUS_ERROR) {
+        return true;
+    }
+
+    if (state.stop_requested &&
+        XML_GetErrorCode(parser) == XML_ERROR_ABORTED) {
+        return true;
+    }
+
+    std::cerr << "XML Parse Error: "
+              << XML_ErrorString(XML_GetErrorCode(parser))
+              << "\n";
+    return false;
+}
+
+bool parsePlainXml(const std::string& xml_file,
+                   XML_Parser parser,
+                   ParserState& state) {
+    std::ifstream file(xml_file, std::ios::binary);
+    if (!file) {
+        std::cerr << "Cannot open dump file: "
+                  << xml_file << "\n";
+        return false;
+    }
+
+    constexpr int buffer_size = 8192;
+    std::vector<char> buffer(buffer_size);
+
+    while (file) {
+        file.read(buffer.data(), buffer_size);
+        std::streamsize bytes_read = file.gcount();
+
+        if (!parseChunk(parser,
+                        state,
+                        buffer.data(),
+                        static_cast<int>(bytes_read),
+                        file.eof())) {
+            return false;
+        }
+
+        if (state.stop_requested) {
+            return true;
+        }
+    }
+
+    return true;
+}
+
+bool parseCompressedXml(const std::string& xml_file,
+                        XML_Parser parser,
+                        ParserState& state) {
+    std::FILE* file = std::fopen(xml_file.c_str(), "rb");
+    if (!file) {
+        std::cerr << "Cannot open dump file: "
+                  << xml_file << "\n";
+        return false;
+    }
+
+    int bz_error = BZ_OK;
+    BZFILE* bz_file = BZ2_bzReadOpen(&bz_error, file, 0, 0, nullptr, 0);
+    if (bz_error != BZ_OK) {
+        std::cerr << "Failed to open bz2 stream for: "
+                  << xml_file << "\n";
+        std::fclose(file);
+        return false;
+    }
+
+    constexpr int buffer_size = 8192;
+    std::vector<char> buffer(buffer_size);
+    bool ok = true;
+
+    while (true) {
+        int bytes_read =
+            BZ2_bzRead(&bz_error, bz_file, buffer.data(), buffer_size);
+
+        if (bz_error != BZ_OK && bz_error != BZ_STREAM_END) {
+            std::cerr << "bz2 read error while parsing: "
+                      << xml_file << "\n";
+            ok = false;
+            break;
+        }
+
+        const bool is_final_chunk = (bz_error == BZ_STREAM_END);
+        ok = parseChunk(parser, state, buffer.data(), bytes_read, is_final_chunk);
+        if (!ok || state.stop_requested || is_final_chunk) {
+            break;
+        }
+    }
+
+    BZ2_bzReadClose(&bz_error, bz_file);
+    std::fclose(file);
+    return ok;
+}
+
+} // namespace
 
 static void startElement(void* userData,
                          const char* name,
                          const char**) {
-
     ParserState* state =
         static_cast<ParserState*>(userData);
 
@@ -35,7 +150,6 @@ static void startElement(void* userData,
 
 static void endElement(void* userData,
                        const char* name) {
-
     ParserState* state =
         static_cast<ParserState*>(userData);
 
@@ -43,8 +157,13 @@ static void endElement(void* userData,
         if (!state->title.empty() &&
             !state->text.empty()) {
 
-            state->callback(state->title,
-                            state->text);
+            bool should_continue =
+                state->callback(state->title,
+                                state->text);
+            if (!should_continue) {
+                state->stop_requested = true;
+                XML_StopParser(state->parser, XML_FALSE);
+            }
         }
         state->in_page = false;
     }
@@ -59,7 +178,6 @@ static void endElement(void* userData,
 static void charData(void* userData,
                      const char* s,
                      int len) {
-
     ParserState* state =
         static_cast<ParserState*>(userData);
 
@@ -75,23 +193,18 @@ static void charData(void* userData,
     }
 }
 
-void WikiParser::parse(
+bool WikiParser::parse(
     const std::string& xml_file,
     PageCallback callback) {
-
-    std::ifstream file(xml_file,
-                       std::ios::binary);
-
-    if (!file) {
-        std::cerr << "Cannot open file\n";
-        return;
+    XML_Parser parser = XML_ParserCreate(NULL);
+    if (!parser) {
+        std::cerr << "Failed to create XML parser\n";
+        return false;
     }
-
-    XML_Parser parser =
-        XML_ParserCreate(NULL);
 
     ParserState state;
     state.callback = callback;
+    state.parser = parser;
 
     XML_SetUserData(parser, &state);
     XML_SetElementHandler(parser,
@@ -100,23 +213,11 @@ void WikiParser::parse(
     XML_SetCharacterDataHandler(parser,
                                 charData);
 
-    const int buffer_size = 8192;
-    std::vector<char> buffer(buffer_size);
-
-    while (file) {
-        file.read(buffer.data(), buffer_size);
-        std::streamsize bytes_read =
-            file.gcount();
-
-        if (!XML_Parse(parser,
-                       buffer.data(),
-                       bytes_read,
-                       file.eof())) {
-
-            std::cerr << "XML Parse Error\n";
-            break;
-        }
-    }
+    const bool is_bz2 = endsWith(xml_file, ".bz2");
+    const bool ok = is_bz2
+        ? parseCompressedXml(xml_file, parser, state)
+        : parsePlainXml(xml_file, parser, state);
 
     XML_ParserFree(parser);
+    return ok;
 }

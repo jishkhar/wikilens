@@ -1,5 +1,6 @@
 #include "inverted_index.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <fstream>
 
@@ -71,8 +72,58 @@ InvertedIndex::lookup(const std::string& term) const {
     return &it->second;
 }
 
+std::vector<std::string>
+InvertedIndex::suggestPrefix(const std::string& prefix,
+                             size_t limit) const {
+    if (prefix.empty() || limit == 0) {
+        return {};
+    }
+
+    struct SuggestionCandidate {
+        std::string term;
+        uint32_t doc_freq;
+    };
+
+    std::vector<SuggestionCandidate> matches;
+    matches.reserve(limit * 4);
+
+    for (const auto& [term, posting_list] : index_) {
+        if (term.rfind(prefix, 0) != 0) {
+            continue;
+        }
+
+        matches.push_back({term, posting_list.doc_freq});
+    }
+
+    std::sort(matches.begin(),
+              matches.end(),
+              [](const SuggestionCandidate& a,
+                 const SuggestionCandidate& b) {
+                    if (a.doc_freq != b.doc_freq) {
+                        return a.doc_freq > b.doc_freq;
+                    }
+                    return a.term < b.term;
+              });
+
+    if (matches.size() > limit) {
+        matches.resize(limit);
+    }
+
+    std::vector<std::string> results;
+    results.reserve(matches.size());
+    for (const auto& match : matches) {
+        results.push_back(match.term);
+    }
+
+    return results;
+}
+
 uint32_t InvertedIndex::totalDocs() const {
     return total_docs_;
+}
+
+size_t InvertedIndex::termCount() const {
+    return index_.size();
 }
 
 uint32_t InvertedIndex::docLength(uint32_t doc_id) const {

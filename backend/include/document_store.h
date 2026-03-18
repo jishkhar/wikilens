@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cstddef>
 #include <string>
 #include <unordered_map>
 
@@ -20,8 +21,10 @@ public:
 
     void setPageRank(uint32_t doc_id, double score);
     double getPageRank(uint32_t doc_id) const;
+    size_t totalDocs() const;
 
     const Document* getDocument(uint32_t doc_id) const;
+    const std::unordered_map<uint32_t, Document>& allDocuments() const;
 
     bool saveToFile(const std::string& path) const;
     bool loadFromFile(const std::string& path);
