@@ -964,6 +964,22 @@ Do not rely on Ubuntu `ufw` alone to protect Docker-published ports. The safer p
 - publish only frontend port `80`
 - use AWS Security Groups as the main network boundary
 
+### Restarting Your Deployment After A Stop
+
+When you need to stop the instance and restart it later:
+
+1. In the EC2 Console, select your instance
+2. Click `Instance State` → `Start`
+
+Your Docker containers won't auto-start unless you added a systemd unit (mentioned in section 9 of this doc). If not, SSH in and run:
+
+```bash
+cd /opt/wikilens
+docker compose up -d
+```
+
+WikiLens will be back up with all your cache and data intact, since both are persisted on the EBS volume at `/srv/wikilens`.
+
 ## 8. Current Deployment Risks And Constraints In The Codebase
 
 These are important and come directly from the current implementation.
