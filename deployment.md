@@ -320,106 +320,354 @@ Important details:
 
 ## 5. Step-By-Step AWS Deployment
 
-### Step 1: Launch The EC2 Instance
+This section is written as a literal runbook. If you want the fastest safe path, do it in this order:
 
-Recommended baseline:
+1. create the EC2 instance
+2. create and attach the data EBS volume
+3. SSH in and mount the volume
+4. install Docker and Git
+5. clone the repo with submodules
+6. add the Docker files from Section 4
+7. download the dump
+8. build and start the containers
+9. verify over HTTP
+10. add ALB + ACM + Route 53 after the raw EC2 deployment works
 
-- AMI: Ubuntu Server `24.04 LTS`
-- instance type: `t3.large` minimum for current Simple English usage
-- storage: `50-80 GB` gp3 minimum
+### Phase A: Create The EC2 Instance In The AWS Console
 
-Security group inbound rules:
+#### Step A1: Sign In And Choose The Region
 
-- `22/tcp` from your IP only, or use AWS Systems Manager Session Manager instead
-- `80/tcp` from `0.0.0.0/0`
-- `443/tcp` from `0.0.0.0/0` only if you later terminate TLS on the instance
+1. Sign in to the AWS Management Console.
+2. In the top-right region selector, choose the AWS Region where you want everything to live.
+3. Keep the EC2 instance, EBS volume, ALB, ACM certificate, and Route 53 alias setup consistent with that region.
 
-Do not expose `8080` publicly.
+Use one region for the whole first deployment. Do not mix resources across regions.
 
-### Step 2: Install Docker And Git
+#### Step A2: Open The EC2 Launch Wizard
 
-SSH to the instance:
+1. In the AWS Console search bar, type `EC2`.
+2. Open `EC2`.
+3. In the left sidebar, choose `Instances`.
+4. Click `Launch instances`.
+
+#### Step A3: Fill In The Launch Wizard
+
+On the `Launch an instance` page, use these values.
+
+##### Name And Tags
+
+- In `Name and tags`, enter: `wikilens-prod-1`
+
+##### Application And OS Images (AMI)
+
+- In `Application and OS Images (Amazon Machine Image)`, keep `Quick Start`
+- Choose `Ubuntu`
+- Choose `Ubuntu Server 24.04 LTS`
+- Architecture: `64-bit (x86)`
+
+##### Instance Type
+
+- In `Instance type`, select `t3.large`
+- If you want a steadier non-burstable option, `m7i.large` is also a good choice
+
+##### Key Pair (Login)
+
+1. In `Key pair (login)`, click `Create new key pair` if you do not already have one.
+2. Use:
+   - `Key pair name`: `wikilens-prod`
+   - `Key pair type`: `RSA`
+   - `Private key file format`: `.pem` if you use OpenSSH or macOS/Linux terminal, `.ppk` if you use PuTTY
+3. Click `Create key pair`.
+4. Your browser downloads the private key file. Store it somewhere safe immediately.
+
+##### Network Settings
+
+1. In `Network settings`, click `Edit`.
+2. For `VPC`, use your default VPC unless you already have a dedicated one.
+3. For `Subnet`, choose a public subnet.
+4. Set `Auto-assign public IP` to `Enable`.
+5. Under `Firewall (security groups)`, choose `Create security group`.
+6. Use:
+   - `Security group name`: `wikilens-web-sg`
+   - `Description`: `WikiLens web and SSH access`
+7. Add these inbound rules:
+   - `SSH`, source `My IP`
+   - `HTTP`, source `Anywhere-IPv4`
+   - `HTTPS`, source `Anywhere-IPv4` only if you know you will later terminate TLS on the instance itself
+
+Important:
+
+- do not add a rule for port `8080`
+- the backend should stay private behind Nginx
+
+##### Configure Storage
+
+In `Configure storage`:
+
+- set the root volume to at least `30 GiB`
+- volume type: `gp3`
+
+This root disk is for Ubuntu, Docker, images, and temporary working space. We will put dump files and cache on a second EBS volume next.
+
+##### Advanced Details
+
+You can leave most of this untouched for the first deployment.
+
+If you already use AWS Systems Manager and want console-based shell access without SSH, attach an instance profile that includes SSM permissions. If not, skip that for now.
+
+#### Step A4: Launch The Instance
+
+1. Review the summary on the right side.
+2. Click `Launch instance`.
+3. Wait for the success screen, then click `View all instances`.
+4. Wait until:
+   - `Instance state` becomes `Running`
+   - `Status check` becomes `2/2 checks passed`
+
+#### Step A5: Copy The Public Address
+
+On the instance details page, copy one of these:
+
+- `Public IPv4 address`
+- or `Public IPv4 DNS`
+
+You will use it for SSH and first-pass verification.
+
+### Phase B: Create And Attach The Persistent EBS Data Volume
+
+You can keep everything on the root volume, but for this project a separate data volume is cleaner because dump files and cache artifacts are large and long-lived.
+
+#### Step B1: Confirm The Instance Availability Zone
+
+1. Stay on the EC2 instance details page.
+2. Note the `Availability Zone`, for example `ap-south-1a`.
+
+Your EBS volume must be created in the same Availability Zone as the instance.
+
+#### Step B2: Create The Volume
+
+1. In the EC2 left sidebar, under `Elastic Block Store`, click `Volumes`.
+2. Click `Create volume`.
+3. Use:
+   - `Volume type`: `gp3`
+   - `Size`: `80 GiB` to start
+   - `Availability Zone`: the same one as your EC2 instance
+4. Under tags, add:
+   - `Key`: `Name`
+   - `Value`: `wikilens-data`
+5. Click `Create volume`.
+
+#### Step B3: Attach The Volume
+
+1. Select the new volume.
+2. Click `Actions` -> `Attach volume`.
+3. For `Instance`, choose `wikilens-prod-1`.
+4. For `Device name`, accept the default or use `/dev/sdf`.
+5. Click `Attach volume`.
+
+### Phase C: SSH Into The Instance
+
+On your local machine:
 
 ```bash
-ssh -i /path/to/key.pem ubuntu@<EC2_PUBLIC_IP>
+chmod 400 /path/to/wikilens-prod.pem
+ssh -i /path/to/wikilens-prod.pem ubuntu@<EC2_PUBLIC_IP>
 ```
 
-Install Docker Engine, Compose plugin, and Git:
+If your key file has a different name, replace it. If AWS gave you a DNS hostname instead of an IP, you can use that instead.
+
+### Phase D: Mount The New EBS Volume
+
+After logging in to Ubuntu, identify the attached disk.
+
+#### Step D1: Find The Device Name
+
+```bash
+lsblk
+```
+
+On Nitro-based EC2 instances, the volume may appear as something like `/dev/nvme1n1` even if you attached it as `/dev/sdf`.
+
+Check whether the disk already has a filesystem:
+
+```bash
+sudo file -s /dev/nvme1n1
+```
+
+Replace `/dev/nvme1n1` with the actual device name from `lsblk`.
+
+Interpret the result like this:
+
+- if the output ends with `data`, the volume is empty and you should format it
+- if it already shows a filesystem like `ext4` or `xfs`, do not format it
+
+#### Step D2: Format The Volume If It Is Empty
+
+Only do this once, and only if the previous command showed `data`.
+
+```bash
+sudo mkfs -t ext4 /dev/nvme1n1
+```
+
+#### Step D3: Mount The Volume
+
+```bash
+sudo mkdir -p /srv/wikilens
+sudo mount /dev/nvme1n1 /srv/wikilens
+df -h /srv/wikilens
+```
+
+You should see the new volume mounted at `/srv/wikilens`.
+
+#### Step D4: Make The Mount Persistent Across Reboots
+
+Get the device UUID:
+
+```bash
+sudo blkid /dev/nvme1n1
+```
+
+Copy the UUID value and back up `/etc/fstab`:
+
+```bash
+sudo cp /etc/fstab /etc/fstab.orig
+```
+
+Open `/etc/fstab`:
+
+```bash
+sudo nano /etc/fstab
+```
+
+Add a line like this at the end:
+
+```text
+UUID=<YOUR_UUID> /srv/wikilens ext4 defaults,nofail 0 2
+```
+
+Save and exit, then test it:
+
+```bash
+sudo mount -a
+df -h /srv/wikilens
+```
+
+If `mount -a` returns without errors, your mount configuration is good.
+
+#### Step D5: Create The Runtime Directories
+
+```bash
+sudo mkdir -p /srv/wikilens/dumps /srv/wikilens/cache
+sudo chown -R ubuntu:ubuntu /srv/wikilens
+```
+
+### Phase E: Install Docker And Git
+
+Use the official Docker apt repository flow on Ubuntu 24.04.
+
+#### Step E1: Install Docker
 
 ```bash
 sudo apt update
-sudo apt install -y ca-certificates curl gnupg git
-
+sudo apt install -y ca-certificates curl git
 sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
-  sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+```
 
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo $VERSION_CODENAME) stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+Create the Docker apt source:
 
+```bash
+sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+```
+
+Install Docker Engine, Buildx, and Compose:
+
+```bash
 sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
 
+Verify:
+
+```bash
+sudo systemctl status docker --no-pager
+sudo docker run hello-world
+```
+
+#### Step E2: Allow Your User To Run Docker Without `sudo`
+
+```bash
 sudo usermod -aG docker $USER
 newgrp docker
-
 docker --version
 docker compose version
 ```
 
-### Step 3: Clone The Repository Correctly
+### Phase F: Clone The Repository
 
-Because Crow is a submodule, clone like this:
+Because Crow is a submodule, clone the repo with submodules included.
 
 ```bash
 cd /opt
 sudo git clone --recurse-submodules <YOUR_REPOSITORY_URL> wikilens
-sudo chown -R $USER:$USER /opt/wikilens
+sudo chown -R ubuntu:ubuntu /opt/wikilens
 cd /opt/wikilens
 ```
 
-If you already cloned without submodules:
+If you already cloned the repo without submodules, fix it like this:
 
 ```bash
+cd /opt/wikilens
 git submodule update --init --recursive
 ```
 
-### Step 4: Create Persistent Host Directories
+### Phase G: Add The Docker Files From Section 4
+
+At this point you are on the EC2 host in `/opt/wikilens`.
+
+Create the files one by one:
 
 ```bash
-sudo mkdir -p /srv/wikilens/dumps /srv/wikilens/cache
-sudo chown -R $USER:$USER /srv/wikilens
+cd /opt/wikilens
+nano backend/.dockerignore
+nano backend/Dockerfile
+nano frontend/.dockerignore
+nano frontend/Dockerfile
+nano frontend/nginx.conf
+nano docker-compose.yml
 ```
 
-If you attach a separate EBS volume, mount it first and then create those directories on that mounted filesystem.
+Paste the file contents from Section 4 into each file.
 
-### Step 5: Add The Docker Files
+If you are using `nano`:
 
-Create the files from Section 4:
+- paste the text
+- press `Ctrl+O`
+- press `Enter`
+- press `Ctrl+X`
 
-- `backend/.dockerignore`
-- `backend/Dockerfile`
-- `frontend/.dockerignore`
-- `frontend/Dockerfile`
-- `frontend/nginx.conf`
-- `docker-compose.yml`
+### Phase H: Download The Wikipedia Dump
 
-### Step 6: Download The Dump File
-
-Because the backend supports `.xml.bz2`, keep the compressed file and save disk.
+The current backend supports compressed `.xml.bz2`, so keep the compressed file and save storage space.
 
 ```bash
 cd /srv/wikilens/dumps
 wget https://dumps.wikimedia.org/simplewiki/latest/simplewiki-latest-pages-articles.xml.bz2
+ls -lh
 ```
 
-If you want to use an uncompressed file instead, that also works, but then update `WIKILENS_DUMP_PATH` accordingly.
+You should see `simplewiki-latest-pages-articles.xml.bz2` in the directory.
 
-### Step 7: Build And Start The Stack
+### Phase I: Build And Start The Containers
+
+From the repo root:
 
 ```bash
 cd /opt/wikilens
@@ -427,40 +675,33 @@ docker compose build
 docker compose up -d
 ```
 
-Check status:
+Watch container status:
 
 ```bash
 docker compose ps
+```
+
+Watch backend logs in real time:
+
+```bash
 docker compose logs -f backend
+```
+
+What you should expect:
+
+- on the first run, the backend will index the dump because the cache directory is empty
+- after the cache exists, later restarts should load the cache instead of rebuilding it
+- the frontend may come up first, but search will not work until the backend has fully loaded
+
+If you want to also watch the frontend:
+
+```bash
 docker compose logs -f frontend
 ```
 
-What to expect on first backend startup:
+### Phase J: Verify The Deployment Over The Public EC2 Address
 
-- the backend will not serve traffic until it finishes cache load or initial indexing
-- if `/srv/wikilens/cache` is empty, it will parse the dump and build the cache first
-- this may take a while depending on instance size and corpus size
-
-### Step 8: Optional One-Time PageRank Recompute
-
-The current backend can skip PageRank during the initial indexing path and recompute it later from persisted artifacts.
-
-Run this one-off command after the initial cache exists:
-
-```bash
-cd /opt/wikilens
-docker compose run --rm backend ./wikilens --recompute-pagerank
-```
-
-Then restart the backend so the serving process reloads the updated document store:
-
-```bash
-docker compose restart backend
-```
-
-### Step 9: Verify The Deployment
-
-From the EC2 host:
+From inside the EC2 instance:
 
 ```bash
 curl http://127.0.0.1/
@@ -469,42 +710,183 @@ curl "http://127.0.0.1/api/search?q=alan+turing&limit=3"
 curl "http://127.0.0.1/api/suggest?q=comp&limit=5"
 ```
 
-From your browser:
+From your local browser:
 
 ```text
 http://<EC2_PUBLIC_IP>/
 ```
 
-If you later put an ALB or domain name in front, replace the public IP with that hostname.
+If the page loads but search fails, the most likely cause is that the backend is still indexing or loading cache. Check:
 
-## 6. HTTPS And AWS-Native Fronting
+```bash
+docker compose logs -f backend
+```
 
-The simplest path is direct EC2 on port `80`, but the better AWS shape is:
+### Phase K: Optional One-Time Offline PageRank Recompute
 
-- Route 53 for DNS
-- Application Load Balancer in front of the instance
-- ACM certificate on the ALB
-- ALB listener `443 -> target group -> EC2 instance port 80`
+The backend can recompute PageRank from the persisted link graph after the initial cache is built.
 
-Why this is a good fit:
+Run:
 
-- you keep TLS termination out of the containers
-- certificate renewal is handled by ACM
-- you can add health checks at the ALB level
+```bash
+cd /opt/wikilens
+docker compose run --rm backend ./wikilens --recompute-pagerank
+docker compose restart backend
+```
 
-Recommended ALB health check path:
+Use this after the first full indexing pass completes.
 
-- `/api/stats`
+## 6. Optional But Recommended: Add ALB, ACM, And Route 53
 
-That path proves:
+Get the raw EC2 deployment working first. After that, add AWS-native HTTPS and DNS.
 
-- frontend Nginx is reachable
-- Nginx can proxy to backend
-- backend is alive and has loaded enough to answer
+### Phase L: Request The ACM Certificate
+
+If you own a domain and want HTTPS with an ALB, request the certificate first.
+
+#### Step L1: Open ACM
+
+1. In the AWS Console search bar, type `Certificate Manager` or `ACM`.
+2. Open `AWS Certificate Manager`.
+3. Make sure you are still in the same AWS Region where your ALB will live.
+
+#### Step L2: Request The Certificate
+
+1. Click `Request a certificate`.
+2. Choose `Request a public certificate`.
+3. Click `Next`.
+4. In `Domain names`, enter your hostname.
+
+Common options:
+
+- `search.example.com` if this app is only one subdomain
+- `example.com` and `www.example.com` if you want the root and `www`
+
+5. Validation method: choose `DNS validation`.
+6. Key algorithm: keep `RSA 2048` unless you have a reason to use another one.
+7. Click `Request`.
+
+If your DNS is already in Route 53 in the same account, AWS can often help you create the validation records from the certificate page.
+
+Wait until the certificate status changes from `Pending validation` to `Issued`.
+
+### Phase M: Create The Target Group
+
+The target group represents your EC2 instance on port `80`.
+
+#### Step M1: Open Target Groups
+
+1. Go back to `EC2`.
+2. In the left sidebar under `Load Balancing`, click `Target Groups`.
+3. Click `Create target group`.
+
+#### Step M2: Fill In The Target Group Form
+
+Use:
+
+- `Choose a target type`: `Instances`
+- `Target group name`: `wikilens-frontend-tg`
+- `Protocol`: `HTTP`
+- `Port`: `80`
+- `VPC`: the same VPC as your EC2 instance
+- `Health check protocol`: `HTTP`
+- `Health check path`: `/api/stats`
+
+Why `/api/stats`:
+
+- it checks the public frontend path
+- it confirms Nginx proxying works
+- it confirms the backend is answering
+
+Click `Next`.
+
+#### Step M3: Register The Instance
+
+1. In `Available instances`, select `wikilens-prod-1`.
+2. Click `Include as pending below`.
+3. Click `Create target group`.
+
+### Phase N: Create The Application Load Balancer
+
+#### Step N1: Open The Load Balancer Wizard
+
+1. In `EC2`, under `Load Balancing`, click `Load Balancers`.
+2. Click `Create load balancer`.
+3. Under `Application Load Balancer`, click `Create`.
+
+#### Step N2: Fill In The ALB Form
+
+Use:
+
+- `Load balancer name`: `wikilens-alb`
+- `Scheme`: `Internet-facing`
+- `IP address type`: `IPv4`
+
+In `Network mapping`:
+
+- choose the same VPC
+- select at least two public subnets in different Availability Zones
+
+In `Security groups`:
+
+- either choose an existing web-facing security group or create one that allows:
+  - `HTTP 80` from `0.0.0.0/0`
+  - `HTTPS 443` from `0.0.0.0/0`
+
+In `Listeners and routing`:
+
+- for the `HTTP:80` listener, forward to `wikilens-frontend-tg`
+
+Click `Create load balancer`.
+
+#### Step N3: Add HTTPS
+
+After the ALB exists and the ACM certificate is `Issued`:
+
+1. Open the ALB.
+2. Go to the `Listeners and rules` tab.
+3. Click `Add listener`.
+4. Choose:
+   - `Protocol`: `HTTPS`
+   - `Port`: `443`
+5. Select the ACM certificate you requested.
+6. Forward the listener to `wikilens-frontend-tg`.
+7. Save.
+
+Optional improvement:
+
+- edit the `HTTP:80` listener and change the default action to redirect to `HTTPS:443`
+
+### Phase O: Point Route 53 At The ALB
+
+Do this only if your DNS is hosted in Route 53.
+
+#### Step O1: Open The Hosted Zone
+
+1. Open `Route 53`.
+2. Click `Hosted zones`.
+3. Select your domain.
+
+#### Step O2: Create The Alias Record
+
+1. Click `Create record`.
+2. Use:
+   - `Record name`: leave blank for the root domain, or enter something like `search`
+   - `Record type`: `A`
+   - `Alias`: `On`
+3. For `Route traffic to`, choose:
+   - `Alias to Application and Classic Load Balancer`
+4. Choose the correct region.
+5. Choose the ALB DNS name from the dropdown.
+6. Click `Create records`.
+
+After DNS propagates, browse to your domain instead of the raw EC2 IP.
 
 ## 7. Operations After Deployment
 
-### Rebuild After Code Changes
+### Daily Commands You Will Actually Use
+
+Rebuild after code changes:
 
 ```bash
 cd /opt/wikilens
@@ -512,26 +894,38 @@ git pull --recurse-submodules
 docker compose up -d --build
 ```
 
-### Restart Without Rebuilding
+Restart containers:
 
 ```bash
 cd /opt/wikilens
 docker compose restart
 ```
 
-### Stop The Stack
+Stop containers:
 
 ```bash
 cd /opt/wikilens
 docker compose down
 ```
 
-### Inspect Logs
+Watch backend logs:
 
 ```bash
 cd /opt/wikilens
 docker compose logs -f backend
+```
+
+Watch frontend logs:
+
+```bash
+cd /opt/wikilens
 docker compose logs -f frontend
+```
+
+Check whether the app is responding:
+
+```bash
+curl http://127.0.0.1/api/stats
 ```
 
 ### Back Up The Persistent Data
@@ -541,16 +935,16 @@ At minimum, back up:
 - `/srv/wikilens/dumps`
 - `/srv/wikilens/cache`
 
-On AWS, the cleanest option is EBS snapshots of the volume holding those paths.
+The cleanest AWS-native option is EBS snapshots of the mounted `/srv/wikilens` volume.
 
 ### When To Clear Cache
 
-Clear `/srv/wikilens/cache` when:
+Clear `/srv/wikilens/cache` only when one of these is true:
 
-- indexing logic changes
-- tokenization/stripping logic changes
-- ranking persistence format changes
-- you switch to a different dump file and want a clean rebuild
+- indexing logic changed
+- tokenizer or Wikitext cleaning changed
+- PageRank persistence behavior changed
+- you switched to a different dump file and want a fresh rebuild
 
 Example:
 
@@ -560,7 +954,15 @@ cd /opt/wikilens
 docker compose restart backend
 ```
 
-Only do that intentionally, because the next backend boot will reindex from scratch.
+Do this carefully. The next backend boot will rebuild from the dump.
+
+### One Important Networking Note
+
+Do not rely on Ubuntu `ufw` alone to protect Docker-published ports. The safer pattern for this project is:
+
+- do not publish backend port `8080` in Compose
+- publish only frontend port `80`
+- use AWS Security Groups as the main network boundary
 
 ## 8. Current Deployment Risks And Constraints In The Codebase
 
@@ -596,3 +998,18 @@ A stronger AWS production shape later would be:
 - offline indexing job that writes cache artifacts to durable storage before service rollout
 
 I do not recommend jumping straight to that with the current codebase because the present runtime still assumes local files and local persistent cache.
+
+## 11. Official Reference Links
+
+These are the main vendor docs I used to make the console steps above concrete.
+
+- EC2 launch wizard: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-launch-instance-wizard.html
+- EC2 security groups: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/creating-security-group.html
+- EBS volume creation: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-creating-volume.html
+- EBS mount and `/etc/fstab` guidance: https://docs.aws.amazon.com/ebs/latest/userguide/ebs-using-volumes.html
+- ACM public certificates: https://docs.aws.amazon.com/acm/latest/userguide/acm-public-certificates.html
+- ALB target groups: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/create-target-group.html
+- Application Load Balancer creation: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/create-application-load-balancer.html
+- HTTPS listener on ALB: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/create-https-listener.html
+- Route 53 alias to ALB: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-to-elb-load-balancer.html
+- Docker Engine on Ubuntu: https://docs.docker.com/engine/install/ubuntu/

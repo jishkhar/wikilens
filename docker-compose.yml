@@ -1,0 +1,26 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wikilens-backend
+    restart: unless-stopped
+    environment:
+      WIKILENS_DUMP_PATH: /data/dumps/simplewiki-latest-pages-articles.xml.bz2
+      WIKILENS_MAX_DOCS: "0"
+    volumes:
+      - /srv/wikilens/dumps:/data/dumps:ro
+      - /srv/wikilens/cache:/app/backend/data/cache
+    expose:
+      - "8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: wikilens-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"

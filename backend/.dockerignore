@@ -1,0 +1,6 @@
+build
+data/cache
+data/corpus
+simplewiki-latest-pages-articles.xml*
+enwiki-*-pages-articles*.xml*
+*.log
